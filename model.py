@@ -8,6 +8,9 @@ from transformers import (AutoModelForSeq2SeqLM,
                           AutoModelWithLMHead, AutoTokenizer, pipeline)
 
 warnings.filterwarnings(action='ignore')
+from transformers import logging
+
+logging.set_verbosity_error()
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 # %% load models(MCQ)
@@ -27,8 +30,6 @@ gpt2_model.to(DEVICE)
 bert_model.to(DEVICE)
 
 # %% load models (WH)
-## 정답 단어 추출
-
 ## 문제 생성
 qg_tokenizer = AutoTokenizer.from_pretrained("iarfmoose/t5-base-question-generator", use_fast=False)
 qg_model = AutoModelForSeq2SeqLM.from_pretrained("iarfmoose/t5-base-question-generator")

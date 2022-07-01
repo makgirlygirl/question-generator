@@ -1,4 +1,7 @@
 #%% package import
+from transformers import logging
+
+logging.set_verbosity_warning()
 import re
 import warnings
 from string import punctuation
@@ -145,9 +148,10 @@ def generate_sentences(partial_sentence,full_sentence):
     
     return top_3_sentences
 #%% WH
-'''
 # 정답 단어 추출
-def get_NP(self, passage):# 명사구에 해당하는 단어 추출
+
+# https://www.nltk.org/book/ch05.html
+def get_NP(self, passage):# 명사구에 해당하는 단어 추출(np:)
     answers = []
     trees = benepar_parser.parse_sents(sent_tokenize(passage))
     for sent_idx, tree in enumerate(trees):
@@ -156,24 +160,6 @@ def get_NP(self, passage):# 명사구에 해당하는 단어 추출
             if subtree.label() == "NP":
                 answers.append(get_flattened(subtree))
     return answers
-
-# 문제 생성
-def generate_question(self, passage, answers):
-    ANSWER_TOKEN = "<answer>"
-    CONTEXT_TOKEN = "<context>"
-    SEQ_LENGTH = 512## 2000이었나? 아무튼 바꾸기
-    
-    questions = []
-
-    for ans in answers: 
-        qg_input = "{} {} {} {}".format(ANSWER_TOKEN, ans, CONTEXT_TOKEN, passage)
-            
-        encoded_input =qg_tokenizer(qg_input, padding='max_length', max_length=SEQ_LENGTH, truncation=True, return_tensors="pt").to(self.device)
-        with torch.no_grad():
-            output =qg_model.generate(input_ids=encoded_input["input_ids"])
-        question = qg_tokenizer.decode(output[0], skip_special_tokens=True)
-        questions.append(question)
-    return questions'''
 
 ## 문제 평가
 def encode_qa_pairs(questions, answers):
@@ -212,13 +198,15 @@ def generate_distractor(self, text, candidate, answers, NNs: list):
     answers.pop(answer_index)
     answers.insert(answer_index, unmasked_result["token_str"])
     return " ".join(answers)
-'''
-# def get_NN(distractor):
-#     NNs = []
-#     tree = benepar_parser.parse(distractor)
-#     subtrees = tree.subtrees()
-#     for subtree in subtrees:
-#         if subtree.label() in ["NN", "NNP", "NNS", "VB"]: #VB for edge case
-#             NNs.extend(subtree.leaves())       
-#     return NNs
-'''
+
+
+# https://www.nltk.org/book/ch05.html
+def get_NN(distractor):#  NN, a noun
+    NNs = []
+    tree = benepar_parser.parse(distractor)
+    subtrees = tree.subtrees()
+    for subtree in subtrees:
+        if subtree.label() in ["NN", "NNP", "NNS", "VB"]: #VB for edge case
+            NNs.extend(subtree.leaves())       
+    return NNs
+

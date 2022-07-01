@@ -1,4 +1,7 @@
 #%%
+from transformers import logging
+
+logging.set_verbosity_warning()
 import warnings
 
 import nltk
@@ -6,7 +9,7 @@ import torch
 
 warnings.filterwarnings(action='ignore')
 from function import (benepar_parser, encode_qa_pairs, generate_distractor,
-                      generate_sentences, get_flattened,
+                      generate_sentences, get_flattened, get_NN,
                       get_sentence_completions, preprocess, sent_tokenize)
 from model import (bert_model, gpt2_model, gpt2_tokenizer, paraphrase_model,
                    paraphrase_tokenizer, qae_model, qae_tokenizer, qg_model,
@@ -81,18 +84,14 @@ class MCQ:
                 # print('hit')
                 for paraphrase_idx in range(1, 3):
                     paraphrased_sentences.append(paraphrase_tokenizer.decode(outputs[paraphrase_idx], skip_special_tokens=True,clean_up_tokenization_spaces=True))
-
-        return paraphrased_sentences
+        sent_completion_dict=get_sentence_completions(paraphrased_sentences)
+        # print(paraphrased_sentences)
+        # print(sent_completion_dict)
+        return sent_completion_dict
 
     ## paraphrase 의 결과가  complete_dict의 input으로 들어감
-    def make_dict(self, passageID, paraphrased_sentences):
-        sent_completion_dict = get_sentence_completions(paraphrased_sentences)
-        question_dict['passageID']=int(passageID)
-        question_dict['question_type']='MCQ'## 문제 유형에 따라 MCQ1, MCQ2, ...
-        # question_dict['question'] = '다음 중 주제로 적절한 것은?' ## 문제 유형에 따라 매핑
-        question_dict['answer']=list(sent_completion_dict.keys())[0]
-
-        # question_table[d1]~question_table[d4]
+    def distractors(self, sent_completion_dict):
+        distractors=[]
         distractor_cnt = 1
 
         for key_sentence in sent_completion_dict:
@@ -102,6 +101,10 @@ class MCQ:
 
             partial_sentences = sent_completion_dict[key_sentence]
             false_sentences =[]
+            # df_TFQuestions.loc[0, 'id'] = 
+            # print_string = "**%s) True Sentence (from the story) :**"%(str(index))
+            # printmd(print_string)
+            # print ("  ",key_sentence)
             
             false_sents = []
             for partial_sent in partial_sentences:
@@ -113,8 +116,22 @@ class MCQ:
                         
                 false_sentences.extend(false_sents)
             
-            question_dict[f'd{distractor_cnt}'] = false_sentences[0]
+            distractors.append( false_sentences[0])
+            
             distractor_cnt += 1
+        # print(distractors)
+        return distractors
+
+    ## paraphrase 의 결과가  complete_dict의 input으로 들어감
+    def make_dict(self, passageID, sent_completion_dict, false_sentences ):
+        question_dict['passageID']=int(passageID)
+        question_dict['question_type']='MCQ'## 문제 유형에 따라 MCQ1, MCQ2, ...
+        # question_dict['question'] = '다음 중 주제로 적절한 것은?' ## 문제 유형에 따라 매핑
+        question_dict['answer']=list(sent_completion_dict.keys())[0]
+        question_dict['d1']=false_sentences[0]
+        question_dict['d2']=false_sentences[1]
+        question_dict['d3']=false_sentences[2]
+        question_dict['d4']=false_sentences[3]
 
         return question_dict
 
@@ -129,20 +146,6 @@ class WH:
 
         self.unmasker = unmasker
 
-    # def get_NP(self, passageID):
-        # passageID로 passage를 가져온다(db랑 연결이 되어야 할 듯 ??)
-    # 일단은 passage로 함수를 만들어봄
-    ## 정답 단어 추출
-    def get_NP(self, passage):
-        answers = []
-        trees = benepar_parser.parse_sents(sent_tokenize(passage))
-        for sent_idx, tree in enumerate(trees):
-            subtrees = tree.subtrees()
-            for subtree in subtrees:
-                if subtree.label() == "NP":
-                    answers.append(get_flattened(subtree))
-        return answers
-
     ## get_NP의 결과가 question_generate의 인풋으로 들어감
     ## 문제 생성
     def question_generate(self, passage, answers):
@@ -155,7 +158,7 @@ class WH:
         for ans in answers: 
             qg_input = "{} {} {} {}".format(ANSWER_TOKEN, ans, CONTEXT_TOKEN, passage)
                 
-            encoded_input =qg_tokenizer(qg_input, padding='max_length', max_length=SEQ_LENGTH, truncation=True, return_tensors="pt").to(DECICE)
+            encoded_input =qg_tokenizer(qg_input, padding='max_length', max_length=SEQ_LENGTH, truncation=True, return_tensors="pt").to(DEVICE)
             with torch.no_grad():
                 output =qg_model.generate(input_ids=encoded_input["input_ids"])
             question = qg_tokenizer.decode(output[0], skip_special_tokens=True)
@@ -165,7 +168,7 @@ class WH:
     ## question_generate, get_NP의 결과가 인풋으로 들어감
     ## 문제 평가
     def get_scores(self, questions, answers):
-        encoded_qa_pairs=encode_qa_pairs(questions, answers);
+        encoded_qa_pairs=encode_qa_pairs(questions, answers)## list: 인코딩
         scores = {}
         qae_model.eval()
         with torch.no_grad():
@@ -173,31 +176,36 @@ class WH:
                 scores[i] = self.qae_model(**encoded_qa_pairs[i])[0][0][1]
         return [k for k, v in sorted(scores.items(), key=lambda item: item[1], reverse=True)]
 
-    ## 오답 생성( 정답 마다 해야함)
-    def get_NN(self, passage, candidate, answers, NNs: list):
-        distractor=generate_distractor(passage, candidate, answers, NNs)
-        NNs = []
-        tree = benepar_parser.parse(distractor)
-        subtrees = tree.subtrees()
-        for subtree in subtrees:
-            if subtree.label() in ["NN", "NNP", "NNS", "VB"]: #VB for edge case
-                NNs.extend(subtree.leaves())       
-        return NNs
     
     ## wh_get_NN의 결과가 인풋으로 드러감..?
     ## wh_get_NN 을 정확히 알고 수정필요
     ## dict 리턴
-    def make_dict(self, passageID, question, answers, wh_get_NN):
+    def distractors(self, passage, answers, NN):
+        NN=get_NN(answers)
+        sentences = nltk.sent_tokenize(passage)
+        for sentence in sentences:
+            if answers in sentence:
+                target_sentence = sentence
+        
+        distractors = []
+        for i in range(4):
+            distractors.append(generate_distractor(target_sentence, 9-i, answers, NN))
+    
 
+    def make_dict(self, passageID, answers, question, distractors):
         question_dict['passageID']=int(passageID)
         question_dict['question_type']='WH'
         question_dict['question'] = question.split("?")[0]+"?"
-        question_dict['answer']=answers
+        # question_dict['answer']=answers
+        # question_dict['d1']=distractors[0]
+        # question_dict['d2']=distractors[1]
+        # question_dict['d3']=distractors[2]
+        # question_dict['d4']=distractors[3]
 
-        question_dict['d1']=wh_get_NN[0]
-        question_dict['d2']=wh_get_NN[1]
-        question_dict['d3']=wh_get_NN[2]
-        question_dict['d4']=wh_get_NN[3]
+        # distractors = []
+        # for i in range(3):
+        #     distractors.append(generate_distractor(target_sentence, 9-i, answers[index], NNs))
+    
 
         return question_dict
 
