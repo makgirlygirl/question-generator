@@ -1,10 +1,17 @@
 #%%
+import warnings
+
 import nltk
 import torch
 
-from function import generate_sentences, get_sentence_completions, preprocess
+warnings.filterwarnings(action='ignore')
+from function import (benepar_parser, encode_qa_pairs, generate_distractor,
+                      generate_sentences, get_flattened,
+                      get_sentence_completions, preprocess, sent_tokenize)
 from model import (bert_model, gpt2_model, gpt2_tokenizer, paraphrase_model,
-                   paraphrase_tokenizer, summarize_model, summarize_tokenizer)
+                   paraphrase_tokenizer, qae_model, qae_tokenizer, qg_model,
+                   qg_tokenizer, summarize_model, summarize_tokenizer,
+                   unmasker)
 
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -13,7 +20,7 @@ question_dict={'passageID':None,
                 'question_type':None,
                 'question':None, 
                 'answer':None,
-                'd1':None, 'd2':None, 'd3':None, 'd4':None}## distractors list?? 아니면 d1, d2, d3, d4??
+                'd1':None, 'd2':None, 'd3':None, 'd4':None}
 #%%
 ## MCQ 쓸 유형별로 조금씩 변경해서 MCQ1, MCQ2, ...등 만들기->question_type에 이걸 넣을것
 class MCQ:
@@ -112,7 +119,87 @@ class MCQ:
         return question_dict
 
 # # %%
-# class WH:
-#     def __init__(self):
+class WH:
+    def __init__(self):
+        self.qg_tokenizer=qg_tokenizer
+        self.qae_tokenizer = qae_tokenizer
+
+        self.qg_model = qg_model
+        self.qae_model = qae_model
+
+        self.unmasker = unmasker
+
+    # def get_NP(self, passageID):
+        # passageID로 passage를 가져온다(db랑 연결이 되어야 할 듯 ??)
+    # 일단은 passage로 함수를 만들어봄
+    ## 정답 단어 추출
+    def get_NP(self, passage):
+        answers = []
+        trees = benepar_parser.parse_sents(sent_tokenize(passage))
+        for sent_idx, tree in enumerate(trees):
+            subtrees = tree.subtrees()
+            for subtree in subtrees:
+                if subtree.label() == "NP":
+                    answers.append(get_flattened(subtree))
+        return answers
+
+    ## get_NP의 결과가 question_generate의 인풋으로 들어감
+    ## 문제 생성
+    def question_generate(self, passage, answers):
+        ANSWER_TOKEN = "<answer>"
+        CONTEXT_TOKEN = "<context>"
+        SEQ_LENGTH = 512## 2000이었나? 아무튼 바꾸기(function.py의 encode_qa_pairs 에도 있음)
+        
+        questions = []
+
+        for ans in answers: 
+            qg_input = "{} {} {} {}".format(ANSWER_TOKEN, ans, CONTEXT_TOKEN, passage)
+                
+            encoded_input =qg_tokenizer(qg_input, padding='max_length', max_length=SEQ_LENGTH, truncation=True, return_tensors="pt").to(DECICE)
+            with torch.no_grad():
+                output =qg_model.generate(input_ids=encoded_input["input_ids"])
+            question = qg_tokenizer.decode(output[0], skip_special_tokens=True)
+            questions.append(question)
+        return questions
+
+    ## question_generate, get_NP의 결과가 인풋으로 들어감
+    ## 문제 평가
+    def get_scores(self, questions, answers):
+        encoded_qa_pairs=encode_qa_pairs(questions, answers);
+        scores = {}
+        qae_model.eval()
+        with torch.no_grad():
+            for i in range(len(encoded_qa_pairs)):
+                scores[i] = self.qae_model(**encoded_qa_pairs[i])[0][0][1]
+        return [k for k, v in sorted(scores.items(), key=lambda item: item[1], reverse=True)]
+
+    ## 오답 생성( 정답 마다 해야함)
+    def get_NN(self, passage, candidate, answers, NNs: list):
+        distractor=generate_distractor(passage, candidate, answers, NNs)
+        NNs = []
+        tree = benepar_parser.parse(distractor)
+        subtrees = tree.subtrees()
+        for subtree in subtrees:
+            if subtree.label() in ["NN", "NNP", "NNS", "VB"]: #VB for edge case
+                NNs.extend(subtree.leaves())       
+        return NNs
+    
+    ## wh_get_NN의 결과가 인풋으로 드러감..?
+    ## wh_get_NN 을 정확히 알고 수정필요
+    ## dict 리턴
+    def make_dict(self, passageID, question, answers, wh_get_NN):
+
+        question_dict['passageID']=int(passageID)
+        question_dict['question_type']='WH'
+        question_dict['question'] = question.split("?")[0]+"?"
+        question_dict['answer']=answers
+
+        question_dict['d1']=wh_get_NN[0]
+        question_dict['d2']=wh_get_NN[1]
+        question_dict['d3']=wh_get_NN[2]
+        question_dict['d4']=wh_get_NN[3]
+
+        return question_dict
+
 
 # %%

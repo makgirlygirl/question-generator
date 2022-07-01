@@ -3,12 +3,14 @@ import warnings
 
 import torch
 from sentence_transformers import SentenceTransformer
-from transformers import (AutoModelForSeq2SeqLM, AutoModelWithLMHead,
-                          AutoTokenizer)
+from transformers import (AutoModelForSeq2SeqLM,
+                          AutoModelForSequenceClassification,
+                          AutoModelWithLMHead, AutoTokenizer, pipeline)
 
 warnings.filterwarnings(action='ignore')
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
-# %% load models
+
+# %% load models(MCQ)
 summarize_tokenizer = AutoTokenizer.from_pretrained("t5-small")
 paraphrase_tokenizer = AutoTokenizer.from_pretrained("Vamsi/T5_Paraphrase_Paws")
 gpt2_tokenizer = AutoTokenizer.from_pretrained("gpt2")
@@ -23,4 +25,19 @@ summarize_model.to(DEVICE)
 paraphrase_model.to(DEVICE)
 gpt2_model.to(DEVICE)
 bert_model.to(DEVICE)
-# %%
+
+# %% load models (WH)
+## 정답 단어 추출
+
+## 문제 생성
+qg_tokenizer = AutoTokenizer.from_pretrained("iarfmoose/t5-base-question-generator", use_fast=False)
+qg_model = AutoModelForSeq2SeqLM.from_pretrained("iarfmoose/t5-base-question-generator")
+qg_model.to(DEVICE)
+
+## 문제 평가 
+qae_tokenizer = AutoTokenizer.from_pretrained("iarfmoose/bert-base-cased-qa-evaluator")
+qae_model = AutoModelForSequenceClassification.from_pretrained("iarfmoose/bert-base-cased-qa-evaluator")
+qae_model.to(DEVICE)
+
+## 오답 생성
+unmasker = pipeline('fill-mask', model='bert-base-cased')

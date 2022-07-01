@@ -3,14 +3,16 @@ import re
 import warnings
 from string import punctuation
 
+warnings.filterwarnings(action='ignore')
 import benepar
 import nltk
 import scipy
 import spacy
 import torch
-from nltk import tokenize
+from nltk import sent_tokenize, tokenize, word_tokenize
 
-from model import bert_model, gpt2_model, gpt2_tokenizer
+from model import (bert_model, gpt2_model, gpt2_tokenizer, qae_model,
+                   qae_tokenizer, qg_model, qg_tokenizer, unmasker)
 
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -99,15 +101,10 @@ def get_sentence_completions(key_sentences):
 def sort_by_similarity(original_sentence, generated_sentences_list):
 
     sentence_embeddings = bert_model.encode(generated_sentences_list)
-
     queries = [original_sentence]
-
     query_embeddings = bert_model.encode(queries)
-
     number_top_matches = len(generated_sentences_list)
-
     dissimilar_sentences = []
-
 
     for query, query_embedding in zip(queries, query_embeddings):
         distances = scipy.spatial.distance.cdist([query_embedding], sentence_embeddings, "cosine")[0]
@@ -122,7 +119,6 @@ def sort_by_similarity(original_sentence, generated_sentences_list):
                 dissimilar_sentences.append(generated_sentences_list[idx].strip())
            
     sorted_dissimilar_sentences = sorted(dissimilar_sentences, key=len)
-    
     return sorted_dissimilar_sentences[:2]
 
 def generate_sentences(partial_sentence,full_sentence):
@@ -148,4 +144,81 @@ def generate_sentences(partial_sentence,full_sentence):
     top_3_sentences = sort_by_similarity(full_sentence, generated_sentences)
     
     return top_3_sentences
-#%% database 랑 연결하면 !!
+#%% WH
+'''
+# 정답 단어 추출
+def get_NP(self, passage):# 명사구에 해당하는 단어 추출
+    answers = []
+    trees = benepar_parser.parse_sents(sent_tokenize(passage))
+    for sent_idx, tree in enumerate(trees):
+        subtrees = tree.subtrees()
+        for subtree in subtrees:
+            if subtree.label() == "NP":
+                answers.append(get_flattened(subtree))
+    return answers
+
+# 문제 생성
+def generate_question(self, passage, answers):
+    ANSWER_TOKEN = "<answer>"
+    CONTEXT_TOKEN = "<context>"
+    SEQ_LENGTH = 512## 2000이었나? 아무튼 바꾸기
+    
+    questions = []
+
+    for ans in answers: 
+        qg_input = "{} {} {} {}".format(ANSWER_TOKEN, ans, CONTEXT_TOKEN, passage)
+            
+        encoded_input =qg_tokenizer(qg_input, padding='max_length', max_length=SEQ_LENGTH, truncation=True, return_tensors="pt").to(self.device)
+        with torch.no_grad():
+            output =qg_model.generate(input_ids=encoded_input["input_ids"])
+        question = qg_tokenizer.decode(output[0], skip_special_tokens=True)
+        questions.append(question)
+    return questions'''
+
+## 문제 평가
+def encode_qa_pairs(questions, answers):
+    SEQ_LENGTH = 512## 2000이었나? 아무튼 바꾸기(question.py의 question_generate 에도 있음)
+    encoded_pairs = []
+    for i in range(len(questions)):
+        encoded_qa =qae_tokenizer(text=questions[i], text_pair=answers[i], padding="max_length", max_length=SEQ_LENGTH, truncation=True, return_tensors="pt")
+        encoded_pairs.append(encoded_qa.to(DEVICE))
+    return encoded_pairs
+'''
+# def get_scores(self, encoded_qa_pairs):
+#     scores = {}
+#     qae_model.eval()
+#     with torch.no_grad():
+#         for i in range(len(encoded_qa_pairs)):
+#             scores[i] = self.qae_model(**encoded_qa_pairs[i])[0][0][1]
+#     return [k for k, v in sorted(scores.items(), key=lambda item: item[1], reverse=True)]  
+'''
+## 오답 생성
+def generate_distractor(self, text, candidate, answers, NNs: list):
+    distractor = []
+    divided = word_tokenize(text)
+    substitute_word = NNs[0]
+
+    mask_index = divided.index(substitute_word)
+    divided.pop(mask_index)
+
+    divided.insert(mask_index, '[MASK]')
+    text = ' '.join(divided)
+    unmasked_result = self.unmasker(text, top_k=10)[candidate]
+
+    text = unmasked_result["sequence"]
+
+    answers = answers.split(' ')
+    answer_index = answers.index(substitute_word)
+    answers.pop(answer_index)
+    answers.insert(answer_index, unmasked_result["token_str"])
+    return " ".join(answers)
+'''
+# def get_NN(distractor):
+#     NNs = []
+#     tree = benepar_parser.parse(distractor)
+#     subtrees = tree.subtrees()
+#     for subtree in subtrees:
+#         if subtree.label() in ["NN", "NNP", "NNS", "VB"]: #VB for edge case
+#             NNs.extend(subtree.leaves())       
+#     return NNs
+'''
