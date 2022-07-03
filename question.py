@@ -14,8 +14,8 @@ from nltk.corpus import stopwords
 
 from function import (benepar_parser, encode_qa_pairs, generate_distractor,
                       generate_sentences, get_keyword, get_NN,
-                      get_sentence_completions, preprocess, sent_tokenize,
-                      transe, word_similarity)
+                      get_sentence_completions, get_sentence_with_ans,
+                      preprocess, sent_tokenize, transe, word_similarity)
 from model import (bert_model, gpt2_model, gpt2_tokenizer, paraphrase_model,
                    paraphrase_tokenizer, qae_model, qae_tokenizer, qg_model,
                    qg_tokenizer, summarize_model, summarize_tokenizer,
@@ -197,16 +197,15 @@ class WH:
 
     
     ## 오답생성
-    def distractors(self, passage, answers, NN):
-        NN=get_NN(answers)
-        sentences = nltk.sent_tokenize(passage)
-        for sentence in sentences:
-            if answers in sentence:
-                target_sentence = sentence
-        
+    def distractors(self, passage, answer):
         distractors = []
+        sentences = nltk.sent_tokenize(passage)
+        NN=get_NN(answer)
+        target_sentence=get_sentence_with_ans(sentences, answer)
         for i in range(4):
-            distractors.append(generate_distractor(target_sentence, 9-i, answers, NN))
+            print(generate_distractor(target_sentence, 9-i, answer, NN))
+            print(transe(generate_distractor(target_sentence, 9-i, answer, NN)))
+            distractors.append(generate_distractor(target_sentence, 9-i, answer, NN))
     
     ## dict 리턴
     def make_dict(self, passageID, answers, question, distractors):

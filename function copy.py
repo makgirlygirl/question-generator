@@ -226,10 +226,9 @@ def get_NN(distractor):#  NN, a noun
     return NNs
 
 # ## 정답이 포함된 문장 찾기
-# def get_sentence_with_ans(passage, answers):
-#     sentences = nltk.sent_tokenize(passage)
-#     for sentence in sentences:
-#         if answers in sentence:
-#             target_sentence = sentence
-#     return target_sentence
+def get_sentence_with_ans(sentences, answer):
+    target_sentence=[]
+    for sentence in sentences:
+        if answer in sentence:
+            target_sentence.append(sentence)
 

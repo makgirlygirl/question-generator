@@ -165,9 +165,9 @@ def transe(str):
 # 정답 단어 추출
 def get_keyword(passage):
     result=[]
-    keywords = kw_model.extract_keywords(passage, keyphrase_ngram_range=(1, 2), top_n=20, stop_words='english')
+    keywords = kw_model.extract_keywords(passage, keyphrase_ngram_range=(1, 1), top_n=50, stop_words='english')
     for kw in keywords:
-        # if kw[1]>0.5:
+    #     if kw[1]>0.5:
             result.append(kw[0])
     return result
 def word_similarity(a, b):
@@ -210,7 +210,6 @@ def pick_question(answers, question, score):
     answers_r=[];questions_r=[];scores_r=[]
     for i in range(len(score)):
         if score[i]>30:
-            print(score[i])
             answers_r.append(answers[i])
             questions_r.append(question[i])
             scores_r.append(score[i])
@@ -248,10 +247,12 @@ def get_NN(distractor):#  NN, a noun
     return NNs
 
 # ## 정답이 포함된 문장 찾기
-# def get_sentence_with_ans(passage, answers):
-#     sentences = nltk.sent_tokenize(passage)
-#     for sentence in sentences:
-#         if answers in sentence:
-#             target_sentence = sentence
-#     return target_sentence
-
+def get_sentence_with_ans(sentences, answer):
+    target_sentence=[]
+    for sentence in sentences:
+        if answer in sentence:
+            target_sentence.append(sentence)
+    ##scientists ’ beliefs 처럼 전처리가 이상하게 된 경우 
+    if len(target_sentence)==0:
+        return None
+    return target_sentence
