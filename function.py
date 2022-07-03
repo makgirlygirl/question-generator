@@ -9,6 +9,8 @@ from string import punctuation
 from nltk.corpus import stopwords
 
 warnings.filterwarnings(action='ignore')
+from difflib import SequenceMatcher
+
 import benepar
 import nltk
 import scipy
@@ -16,7 +18,7 @@ import spacy
 import torch
 from nltk import sent_tokenize, tokenize, word_tokenize
 
-from model import (bert_model, gpt2_model, gpt2_tokenizer, qae_model,
+from model import (bert_model, gpt2_model, gpt2_tokenizer, kw_model, qae_model,
                    qae_tokenizer, qg_model, qg_tokenizer, translator, unmasker)
 
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -161,9 +163,17 @@ def transe(str):
     return str
 #%% WH
 # 정답 단어 추출
-
+def get_keyword(passage):
+    result=[]
+    keywords = kw_model.extract_keywords(passage, keyphrase_ngram_range=(1, 2), top_n=20, stop_words='english')
+    for kw in keywords:
+        # if kw[1]>0.5:
+            result.append(kw[0])
+    return result
+def word_similarity(a, b):
+    return SequenceMatcher(None, a, b).ratio()
 # https://www.nltk.org/book/ch05.html
-def get_NP(passage):# 명사구에 해당하는 단어 추출(np:)
+'''def get_NP(passage):# 명사구에 해당하는 단어 추출(np:)
     answers = []
     trees = benepar_parser.parse_sents(sent_tokenize(passage))
     for sent_idx, tree in enumerate(trees):
@@ -173,18 +183,20 @@ def get_NP(passage):# 명사구에 해당하는 단어 추출(np:)
                 answers.append(get_flattened(subtree))
     return list(set(answers))## 중복 제거
 
+
 def remove_stopwords(stop_words, answers):
-    aa=answers.copy()
-    for ans in aa:
-        if ans  in stop_words:
-            aa.remove(ans)
-    return aa
+    for ans in answers:
+        if ans in stop_words:
+            answers.remove(ans)
+    return answers
 
 def ans_len_limit(answers):
     for i in answers:
         if len(i.split()) >=3:
+            print(i)
             answers.remove(i)
     return answers
+'''
 ## 문제 평가
 def encode_qa_pairs(questions, answers):
     SEQ_LENGTH = 512## 2000이었나? 아무튼 바꾸기(question.py의 question_generate 에도 있음)
@@ -193,6 +205,16 @@ def encode_qa_pairs(questions, answers):
         encoded_qa =qae_tokenizer(text=questions[i], text_pair=answers[i], padding="max_length", max_length=SEQ_LENGTH, truncation=True, return_tensors="pt")
         encoded_pairs.append(encoded_qa.to(DEVICE))
     return encoded_pairs
+
+def pick_question(answers, question, score):
+    answers_r=[];questions_r=[];scores_r=[]
+    for i in range(len(score)):
+        if score[i]>30:
+            print(score[i])
+            answers_r.append(answers[i])
+            questions_r.append(question[i])
+            scores_r.append(score[i])
+    return answers_r, questions_r, scores_r
 ## 오답 생성
 def generate_distractor(self, text, candidate, answers, NNs: list):
     distractor = []

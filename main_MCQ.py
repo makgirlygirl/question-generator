@@ -4,7 +4,7 @@ import warnings
 
 from transformers import logging
 
-from function import ans_len_limit, get_NN, get_NP, transe
+from function import ans_len_limit, get_NN, get_NP, pick_question, transe
 from question import *
 
 logging.set_verbosity_warning()

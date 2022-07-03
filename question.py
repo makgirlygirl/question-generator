@@ -2,6 +2,7 @@
 from transformers import logging
 
 logging.set_verbosity_warning()
+import itertools
 import warnings
 
 import nltk
@@ -13,8 +14,9 @@ from nltk.corpus import stopwords
 
 from function import (ans_len_limit, benepar_parser, encode_qa_pairs,
                       generate_distractor, generate_sentences, get_flattened,
-                      get_NN, get_NP, get_sentence_completions, preprocess,
-                      remove_stopwords, sent_tokenize, transe)
+                      get_keyword, get_NN, get_NP, get_sentence_completions,
+                      preprocess, remove_stopwords, sent_tokenize, transe,
+                      word_similarity)
 from model import (bert_model, gpt2_model, gpt2_tokenizer, paraphrase_model,
                    paraphrase_tokenizer, qae_model, qae_tokenizer, qg_model,
                    qg_tokenizer, summarize_model, summarize_tokenizer,
@@ -113,7 +115,7 @@ class MCQ:
                     if false_sents != []:
                         break
                 false_sentences.extend(false_sents)
-            print(false_sentences)
+            # print(false_sentences)
             distractors.append(transe(false_sentences[0]))
             distractor_cnt += 1
         return distractors
@@ -142,12 +144,27 @@ class WH:
 
         self.unmasker = unmasker
 
+    '''    
+        def answers_generate(self, passage):
+            answers=get_NP(passage)
+            print(answers)
+            answers=ans_len_limit(answers)
+            print(answers)
+
+            stop_words = set(stopwords.words('english'))
+            answers=remove_stopwords(stop_words, answers)
+            print(answers)
+
+            return answers
+        '''
     ## 정답 생성
     def answers_generate(self, passage):
-        answers=get_NP(passage)
-        answers=ans_len_limit(answers)
-        stop_words = set(stopwords.words('english'))
-        answers=remove_stopwords(stop_words, answers)
+        answers=get_keyword(passage)
+        pair=list(itertools.combinations((answers),2))
+        for i in pair:
+            a=i[0]; b=i[1]
+            if word_similarity(a, b)>0.8:
+                answers.remove(b)
         return answers
     ## get_NP의 결과가 question_generate의 인풋으로 들어감
     ## 문제 생성
