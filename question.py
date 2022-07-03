@@ -12,11 +12,10 @@ warnings.filterwarnings(action='ignore')
 # nltk.download('stopwords')
 from nltk.corpus import stopwords
 
-from function import (ans_len_limit, benepar_parser, encode_qa_pairs,
-                      generate_distractor, generate_sentences, get_flattened,
-                      get_keyword, get_NN, get_NP, get_sentence_completions,
-                      preprocess, remove_stopwords, sent_tokenize, transe,
-                      word_similarity)
+from function import (benepar_parser, encode_qa_pairs, generate_distractor,
+                      generate_sentences, get_keyword, get_NN,
+                      get_sentence_completions, preprocess, sent_tokenize,
+                      transe, word_similarity)
 from model import (bert_model, gpt2_model, gpt2_tokenizer, paraphrase_model,
                    paraphrase_tokenizer, qae_model, qae_tokenizer, qg_model,
                    qg_tokenizer, summarize_model, summarize_tokenizer,
