@@ -1,4 +1,5 @@
 #%%
+######## translate 하기 전
 from transformers import logging
 
 logging.set_verbosity_warning()
@@ -14,7 +15,7 @@ from nltk.corpus import stopwords
 from function import (ans_len_limit, benepar_parser, encode_qa_pairs,
                       generate_distractor, generate_sentences, get_flattened,
                       get_NN, get_NP, get_sentence_completions, preprocess,
-                      remove_stopwords, sent_tokenize, transe)
+                      remove_stopwords, sent_tokenize)
 from model import (bert_model, gpt2_model, gpt2_tokenizer, paraphrase_model,
                    paraphrase_tokenizer, qae_model, qae_tokenizer, qg_model,
                    qg_tokenizer, summarize_model, summarize_tokenizer,
@@ -44,7 +45,7 @@ class MCQ:
     # def summarize(self, passageID):
         # passageID로 passage를 가져온다(db랑 연결이 되어야 할 듯 ??)
     # 일단은 passage로 함수를 만들어봄
-    def summarize(self, passage, isTranse=True):
+    def summarize(self, passage):
         ## passageID로 passage를 가져온다(db랑 연결이 되어야 할 듯 ??)
         inputs = summarize_tokenizer.encode("summarize: " + passage, return_tensors="pt", max_length=2000)
         inputs = inputs.to(DEVICE)
@@ -53,12 +54,12 @@ class MCQ:
         extracted_sentences = summarize_tokenizer.decode(outputs[0], skip_special_tokens=True, clean_up_tokenization_spaces=True)
         tokenized_sentences = nltk.tokenize.sent_tokenize(extracted_sentences)
 
-        filter_quotes_and_questions = preprocess(tokenized_sentences, isTranse)
+        filter_quotes_and_questions = preprocess(tokenized_sentences)
         ## 5문장을 리턴할 수는 없을까?
         return filter_quotes_and_questions# list
     
     ## summarize의 결과가 paraphrase의 input으로 들어감
-    def paraphrase(self, filter_quotes_and_questions, isTranse=True):# list->list
+    def paraphrase(self, filter_quotes_and_questions):# list->list
         paraphrased_sentences=[]
         for summary_idx in range(len(filter_quotes_and_questions)):
             sentence = filter_quotes_and_questions[summary_idx]
@@ -76,28 +77,23 @@ class MCQ:
                 early_stopping=True,
                 num_return_sequences=4
                 )
-            if isTranse==True:
-                paraphrased_sentences.append(transe(paraphrase_tokenizer.decode(outputs[0], skip_special_tokens=True,clean_up_tokenization_spaces=True)))
-            else: 
-                paraphrased_sentences.append(paraphrase_tokenizer.decode(outputs[0], skip_special_tokens=True,clean_up_tokenization_spaces=True))
+
+            paraphrased_sentences.append(paraphrase_tokenizer.decode(outputs[0], skip_special_tokens=True,clean_up_tokenization_spaces=True))
+        
             if len(paraphrased_sentences) == 4:
                 break
 
             if (summary_idx == (len(filter_quotes_and_questions) - 1)) & (len(paraphrased_sentences) < 4): # 마지막인데 채워지지 않았을 경우 존재하는 paraphrased sentence 반복해서 false 문장 생성
 
                 for paraphrase_idx in range(1, 5):
-                    if isTranse==True:
-                        paraphrased_sentences.append(transe(paraphrase_tokenizer.decode(outputs[paraphrase_idx], skip_special_tokens=True,clean_up_tokenization_spaces=True)))
-                    else:
-                        paraphrased_sentences.append(transe(paraphrase_tokenizer.decode(outputs[paraphrase_idx], skip_special_tokens=True,clean_up_tokenization_spaces=True)))
-
+                    paraphrased_sentences.append(paraphrase_tokenizer.decode(outputs[paraphrase_idx], skip_special_tokens=True,clean_up_tokenization_spaces=True))
         sent_completion_dict=get_sentence_completions(paraphrased_sentences)
         # print(paraphrased_sentences)
         # print(sent_completion_dict)
         return sent_completion_dict
 
     ## paraphrase 의 결과가  complete_dict의 input으로 들어감
-    def distractors(sent_completion_dict, isTranse=True):
+    def distractors(self, sent_completion_dict):
         distractors=[]
         distractor_cnt = 1
 
@@ -106,24 +102,28 @@ class MCQ:
                 break
             partial_sentences = sent_completion_dict[key_sentence]
             false_sentences =[]
+            # df_TFQuestions.loc[0, 'id'] = 
+            # print_string = "**%s) True Sentence (from the story) :**"%(str(index))
+            # printmd(print_string)
+            # print ("  ",key_sentence)
             false_sents = []
             for partial_sent in partial_sentences:
                 for repeat in range(10):
                     false_sents = generate_sentences(partial_sent, key_sentence)
                     if false_sents != []:
                         break
+                        
                 false_sentences.extend(false_sents)
-            print(false_sentences)
-            distractors.append(transe(false_sentences[0]))
+            distractors.append(false_sentences[0])
             distractor_cnt += 1
         return distractors
 
     ## paraphrase 의 결과가  complete_dict의 input으로 들어감
-    def make_dict(self, passageID, sent_completion_dict,false_sentences):
+    def make_dict(self, passageID, sent_completion_dict,false_sentences ):
         question_dict['passageID']=int(passageID)
         question_dict['question_type']='MCQ'## 문제 유형에 따라 MCQ1, MCQ2, ...
         # question_dict['question'] = '다음 중 주제로 적절한 것은?' ## 문제 유형에 따라 매핑
-        question_dict['answer']=sent_completion_dict
+        question_dict['answer']=list(sent_completion_dict.keys())[0]## 왜 0이지??
         question_dict['d1']=false_sentences[0]
         question_dict['d2']=false_sentences[1]
         question_dict['d3']=false_sentences[2]

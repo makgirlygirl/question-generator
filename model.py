@@ -12,8 +12,11 @@ from transformers import logging
 
 logging.set_verbosity_error()
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
+from googletrans import Translator
 
 # %% load models(MCQ)
+translator = Translator()
+
 summarize_tokenizer = AutoTokenizer.from_pretrained("t5-small")
 paraphrase_tokenizer = AutoTokenizer.from_pretrained("Vamsi/T5_Paraphrase_Paws")
 gpt2_tokenizer = AutoTokenizer.from_pretrained("gpt2")

@@ -1,4 +1,5 @@
 #%% package import
+##### translate 하기전
 from transformers import logging
 
 logging.set_verbosity_warning()
@@ -32,7 +33,7 @@ benepar.download('benepar_en3')
 benepar_parser = benepar.Parser("benepar_en3")
 
 #%% MCQ
-def preprocess(sentences, isTranse=True):
+def preprocess(sentences):
     output = []
     for sent in sentences:
         single_quotes_present = len(re.findall(r"['][\w\s.:;,!?\\-]+[']",sent))>0
@@ -41,10 +42,7 @@ def preprocess(sentences, isTranse=True):
         if single_quotes_present or double_quotes_present or question_present :
             continue
         else:
-            if isTranse==True:
-                output.append(transe(sent.strip(punctuation)))
-            else: 
-                output.append(sent.strip(punctuation))
+            output.append(sent.strip(punctuation))
     return output
 # %% MCQ
 def get_flattened(t):# MCQ, WH
@@ -153,6 +151,8 @@ def generate_sentences(partial_sentence,full_sentence):
         generated_sentences.append(decoded_sentences_list[0]) # takes the first sentence 
         
     top_3_sentences = sort_by_similarity(full_sentence, generated_sentences)
+    # top_sentences = sort_by_similarity(full_sentence, generated_sentences)
+    # print(top_3_sentences)
     return top_3_sentences
 
 def transe(str):
